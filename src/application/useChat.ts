@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { moderateUserInput, type ModerationLanguage } from './contentModeration'
+import { buildImageGenerationContext } from './imageContext'
 import {
   buildReferenceContext,
   estimateMessageTokens,
@@ -234,13 +235,21 @@ export function useChat(gateway: ChatGateway, historyRepository: ChatHistoryRepo
       let assistantMessage: ChatMessage
       let spokenAnswer: string
       if (mode === 'image') {
-        const generatedImage = await gateway.generateImage(selectedModel, {
-          prompt: cleanContent,
-          size: imageSize,
+        const imageContext = buildImageGenerationContext(
+          activeSession?.messages ?? [],
+          cleanContent,
           images,
+        )
+        const generatedImage = await gateway.generateImage(selectedModel, {
+          prompt: imageContext.prompt,
+          size: imageSize,
+          images: imageContext.images,
         })
         spokenAnswer = language === 'id' ? 'Gambar berhasil dibuat.' : 'Image generated successfully.'
         assistantMessage = createMessage('assistant', spokenAnswer, [generatedImage])
+        if (imageContext.continuedFromPrevious) {
+          addLog('info', 'Konteks gambar sebelumnya digunakan untuk generasi lanjutan.')
+        }
       } else {
         const referenceContext = buildReferenceContext(sessions, resolvedReferences)
         const hiddenReferenceMessage = referenceContext.content

@@ -34,7 +34,7 @@ Plugin proxy berjalan pada `pnpm dev` dan `pnpm preview`. Untuk produksi di stat
 - Model selector dinamis untuk chat, vision, dan image generation.
 - Chat teks, status loading, error handling, dan percakapan baru.
 - Upload JPG/PNG/WebP untuk analisis gambar; file dikompresi sebelum dikirim dan disimpan lokal.
-- Mode **Buat Gambar** melalui `/v1/images/generations`, termasuk pilihan rasio dan rendering hasil.
+- Mode **Buat Gambar** melalui `/v1/images/generations`, termasuk pilihan rasio, rendering hasil, dan generasi lanjutan yang mempertahankan prompt serta hasil gambar terakhir dalam sesi yang sama.
 - Voice chat melalui Web Speech API (`id-ID`) dan balasan text-to-speech.
 - Tema light sebagai default, dark mode manual, dan preferensi tersimpan lokal.
 - Layout responsif untuk desktop dan mobile.
