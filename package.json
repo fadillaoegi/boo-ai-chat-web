@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "tokens": "node --experimental-strip-types scripts/gen-tokens.ts",
+    "check:tools": "node --env-file=.env.local --experimental-strip-types scripts/check-tools.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "node --test tests/*.test.ts",

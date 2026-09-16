@@ -41,6 +41,41 @@ Plugin proxy berjalan pada `pnpm dev` dan `pnpm preview`. Untuk produksi di stat
 
 Voice recognition bergantung pada dukungan Web Speech API browser. Chrome/Edge umumnya mendukung; browser yang tidak mendukung akan menonaktifkan tombol mikrofon.
 
+## Design token
+
+Token visual Boo (warna, kedalaman shadow, radius, border, font) berada di `src/design/tokens.ts`
+dan menjadi satu-satunya sumber kebenaran. File itu sengaja tidak mengimpor apa pun dan tidak
+menyebut CSS maupun DOM, sehingga bisa dipakai web maupun CLI `boo` nanti.
+
+```bash
+# ubah src/design/tokens.ts, lalu:
+pnpm tokens     # regenerate src/design/tokens.css
+```
+
+`tokens.css` **hasil generate — jangan diedit manual.** Isinya custom property pada `:root`/`:root.dark`
+plus blok `@theme inline` Tailwind.
+
+Shadow chunky punya empat varian warna:
+
+| Utility | Warna | Dipakai untuk |
+|---|---|---|
+| `shadow-boo-*` | ikut tema (`#000` → `#525252`) | permukaan normal |
+| `shadow-boo-soft-*` | ikut tema (`#a3a3a3` → `#525252`) | elemen markdown |
+| `shadow-boo-inverse-*` | tetap `#a3a3a3` | permukaan hitam |
+| `shadow-boo-danger-*` | tetap `#7f1d1d` | permukaan merah |
+
+Skala `*`: `xs`=1px, `sm`=2px, `md`=3px, `lg`=4px, `xl`=5px, `2xl`=8px.
+
+Karena warnanya sudah membalik lewat custom property, **jangan tulis varian `dark:` untuk shadow**
+— cukup `shadow-boo-md`, bukan `shadow-boo-md dark:shadow-boo-md`.
+
+CLI membaca token yang sama sebagai hex:
+
+```ts
+import { resolve } from './design/tokens.ts'
+resolve('dark').accent   // '#7dd3fc'
+```
+
 ## Clean architecture
 
 ```text
@@ -59,7 +94,32 @@ Dependency mengarah ke domain: UI menggunakan application hook, application berg
 ```bash
 pnpm lint
 pnpm build
+pnpm test
 ```
+
+### Memeriksa dukungan function calling
+
+```bash
+pnpm check:tools                       # model kurasi
+pnpm check:tools ag/claude-sonnet-4-6  # model tertentu
+pnpm check:tools --all                 # seluruh model terdaftar
+```
+
+Skrip ini menguji tiga lapis: model mengeluarkan `tool_calls` yang valid, `arguments`
+tetap utuh setelah disambung dari chunk SSE, dan hasil tool yang dikirim balik
+(`role: "tool"`) benar-benar diterima sehingga percakapan bisa dilanjutkan.
+
+Jalankan ulang setiap kali menambah provider atau memperbarui 9Router — dukungan
+tool calling berbeda per provider dan bisa berubah tanpa pemberitahuan.
+
+Catatan dari hasil pengujian yang perlu diingat saat memakai API ini:
+
+- **Kirim `stream` secara eksplisit.** Provider `ag/*` default-nya streaming, sehingga
+  request tanpa field tersebut membalas SSE saat JSON yang diharapkan.
+- **Model thinking mengirim `reasoning_content`** terpisah dari `content`; jangan
+  dianggap balasan kosong.
+- **Format `tool_call_id` berbeda antarprovider.** Kembalikan apa adanya, jangan diparsing.
+- **Balasan kosong sesekali terjadi**, jadi pemanggilnya perlu retry.
 
 ## Riwayat lokal dan log
 

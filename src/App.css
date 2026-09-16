@@ -87,7 +87,7 @@
 }
 
 .markdown-message a {
-  color: #0369a1;
+  color: var(--boo-link);
   font-weight: 800;
   text-decoration: underline;
   text-decoration-thickness: 2px;
@@ -181,7 +181,7 @@
   border: 2px solid #000;
   border-radius: 12px;
   background: #111827;
-  box-shadow: 3px 3px 0 #737373;
+  box-shadow: var(--shadow-boo-soft-md);
   color: #e5e7eb;
 }
 
@@ -249,7 +249,7 @@
   overflow-x: auto;
   border: 2px solid #000;
   border-radius: 10px;
-  box-shadow: 3px 3px 0 #a3a3a3;
+  box-shadow: var(--shadow-boo-soft-md);
 }
 
 .markdown-message table {
@@ -294,7 +294,7 @@
   margin: .85em auto;
   border: 2px solid #000;
   border-radius: 12px;
-  box-shadow: 4px 4px 0 #a3a3a3;
+  box-shadow: var(--shadow-boo-soft-lg);
 }
 
 .markdown-message del {
@@ -303,10 +303,6 @@
 
 .dark .markdown-message h1 {
   border-bottom-color: rgb(255 255 255 / 16%);
-}
-
-.dark .markdown-message a {
-  color: #7dd3fc;
 }
 
 .dark .markdown-message a:hover {
@@ -327,12 +323,10 @@
 
 .dark .markdown-code-block {
   border-color: #fff;
-  box-shadow: 3px 3px 0 #525252;
 }
 
 .dark .markdown-table-wrap {
   border-color: #fff;
-  box-shadow: 3px 3px 0 #525252;
 }
 
 .dark .markdown-message th,
@@ -350,7 +344,6 @@
 
 .dark .markdown-message img {
   border-color: #fff;
-  box-shadow: 4px 4px 0 #525252;
 }
 
 @media (max-width: 640px) {
