@@ -1,8 +1,18 @@
-import type { ChatMessage, ChatSession, ChatSessionReference } from '../domain/chat'
+import type { ChatMessage, ChatModel, ChatSession, ChatSessionReference } from '../domain/chat'
+import { messageTextWithFiles } from './fileArtifacts.ts'
 
-export const MAX_INPUT_CONTEXT_TOKENS = 10_000
-export const MAX_REFERENCE_CONTEXT_TOKENS = 3_000
+/** Dipakai jika 9Router tidak melaporkan panjang konteks model. */
+export const DEFAULT_INPUT_CONTEXT_TOKENS = 32_000
+/** Batas atas demi biaya dan latensi, walau model sanggup 1 juta token. */
+export const MAX_INPUT_CONTEXT_TOKENS = 200_000
+export const MAX_REFERENCE_CONTEXT_TOKENS = 24_000
 export const MAX_SESSION_REFERENCES = 3
+/** Gambar unggahan terbaru yang dikirim ulang; yang lebih lama diganti catatan teks. */
+export const MAX_CONTEXT_IMAGES = 4
+
+const RESPONSE_RESERVE_TOKENS = 16_000
+// Estimasi 4 karakter per token bisa meleset untuk kode dan bahasa Indonesia.
+const CONTEXT_SAFETY_RATIO = 0.75
 
 const APPROXIMATE_CHARS_PER_TOKEN = 4
 const MESSAGE_OVERHEAD_TOKENS = 8
@@ -28,13 +38,24 @@ export interface ReferenceContext {
   includedSessionIds: string[]
 }
 
+export function contextBudgetForModel(model?: Pick<ChatModel, 'contextLength' | 'maxOutputTokens'>): number {
+  if (!model?.contextLength) return DEFAULT_INPUT_CONTEXT_TOKENS
+  const reserve = Math.min(model.maxOutputTokens ?? RESPONSE_RESERVE_TOKENS, RESPONSE_RESERVE_TOKENS)
+  const budget = Math.floor(model.contextLength * CONTEXT_SAFETY_RATIO) - reserve
+  return Math.min(MAX_INPUT_CONTEXT_TOKENS, Math.max(Math.floor(model.contextLength / 2), budget))
+}
+
+export function referenceBudgetFor(inputBudget: number): number {
+  return Math.min(MAX_REFERENCE_CONTEXT_TOKENS, Math.floor(inputBudget / 4))
+}
+
 export function estimateTextTokens(text: string): number {
   return Math.ceil(text.length / APPROXIMATE_CHARS_PER_TOKEN)
 }
 
 export function estimateMessageTokens(message: ChatMessage): number {
   const images = message.images?.length ?? (message.image ? 1 : 0)
-  return MESSAGE_OVERHEAD_TOKENS + estimateTextTokens(message.content) + (images * IMAGE_ESTIMATE_TOKENS)
+  return MESSAGE_OVERHEAD_TOKENS + estimateTextTokens(messageTextWithFiles(message)) + (images * IMAGE_ESTIMATE_TOKENS)
 }
 
 function truncateText(text: string, maxTokens: number): string {
@@ -54,12 +75,12 @@ function truncateMessage(message: ChatMessage, tokenBudget: number): ChatMessage
   const images = message.images?.length ?? (message.image ? 1 : 0)
   const fixedTokens = MESSAGE_OVERHEAD_TOKENS + (images * IMAGE_ESTIMATE_TOKENS)
   if (fixedTokens >= tokenBudget) return null
-  return { ...message, content: truncateText(message.content, tokenBudget - fixedTokens) }
+  return { ...message, content: truncateText(messageTextWithFiles(message), tokenBudget - fixedTokens), files: undefined }
 }
 
 export function selectContextMessages(
   messages: ChatMessage[],
-  tokenBudget = MAX_INPUT_CONTEXT_TOKENS,
+  tokenBudget = DEFAULT_INPUT_CONTEXT_TOKENS,
 ): ContextSelection {
   const budget = Math.max(0, Math.floor(tokenBudget))
   const selected: ChatMessage[] = []
@@ -80,7 +101,7 @@ export function selectContextMessages(
       if (shortened) {
         selected.push(shortened)
         estimatedTokens = estimateMessageTokens(shortened)
-        truncated = shortened.content !== message.content
+        truncated = shortened.content !== messageTextWithFiles(message)
       }
     }
     break
@@ -95,13 +116,36 @@ export function selectContextMessages(
   }
 }
 
-export function getContextUsage(messages: ChatMessage[]): ContextUsage {
+/**
+ * Hanya gambar unggahan terbaru yang dikirim ulang. Tanpa batas ini, konteks besar bisa membawa
+ * puluhan gambar base64 (hingga ~900 KB masing-masing) di setiap request.
+ */
+export function limitContextImages(messages: ChatMessage[], maxImages = MAX_CONTEXT_IMAGES): ChatMessage[] {
+  let remaining = maxImages
+  return messages.slice().reverse().map((message) => {
+    const images = message.images?.length ? message.images : message.image ? [message.image] : []
+    const uploads = images.filter((image) => image.kind === 'upload')
+    if (!uploads.length) return message
+    const kept = uploads.slice(0, Math.max(0, remaining))
+    remaining -= kept.length
+    const omitted = uploads.length - kept.length
+    if (!omitted) return message
+    return {
+      ...message,
+      image: undefined,
+      images: [...images.filter((image) => image.kind !== 'upload'), ...kept],
+      content: `${message.content}\n\n[${omitted} earlier image attachment${omitted === 1 ? '' : 's'} omitted]`,
+    }
+  }).reverse()
+}
+
+export function getContextUsage(messages: ChatMessage[], maxTokens = DEFAULT_INPUT_CONTEXT_TOKENS): ContextUsage {
   const totalTokens = messages.reduce((total, message) => total + estimateMessageTokens(message), 0)
-  const selection = selectContextMessages(messages)
+  const selection = selectContextMessages(messages, maxTokens)
   return {
-    estimatedTokens: Math.min(totalTokens, MAX_INPUT_CONTEXT_TOKENS),
-    maxTokens: MAX_INPUT_CONTEXT_TOKENS,
-    percent: Math.min(100, Math.round((totalTokens / MAX_INPUT_CONTEXT_TOKENS) * 100)),
+    estimatedTokens: Math.min(totalTokens, maxTokens),
+    maxTokens,
+    percent: Math.min(100, Math.round((totalTokens / maxTokens) * 100)),
     omittedMessages: selection.omittedMessages,
   }
 }
@@ -110,7 +154,7 @@ function formatReferenceMessage(message: ChatMessage): string {
   const role = message.role === 'user' ? 'User' : 'Assistant'
   const images = message.images?.length ?? (message.image ? 1 : 0)
   const attachment = images ? ` [${images} image attachment${images === 1 ? '' : 's'} omitted]` : ''
-  return `${role}: ${message.content}${attachment}`
+  return `${role}: ${messageTextWithFiles(message)}${attachment}`
 }
 
 export function buildReferenceContext(

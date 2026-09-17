@@ -32,9 +32,11 @@ Plugin proxy berjalan pada `pnpm dev` dan `pnpm preview`. Untuk produksi di stat
 ## Fitur
 
 - Model selector dinamis untuk chat, vision, dan image generation.
-- Chat teks, status loading, error handling, dan percakapan baru.
+- Markdown kaya: syntax highlighting untuk blok kode berlabel bahasa (`rehype-highlight`) dan rumus matematika KaTeX (`$..$`, `$$..$$`, serta `\(..\)`/`\[..\]` yang otomatis diseragamkan; `$5` tetap dibaca sebagai harga).
+- Chat teks dengan jawaban streaming (muncul bertahap), tombol **Stop** untuk menghentikan respons (bagian yang sudah tampil tetap disimpan), percakapan baru, serta aksi pesan seperti ChatGPT/Claude: **Edit** pesan pengguna (pesan setelahnya dijawab ulang), **Buat ulang jawaban** terakhir, dan **Coba lagi** saat respons gagal. Mode request mengikuti jawaban yang diganti (gambar dibuat ulang sebagai gambar). Proxy `/api/chat` meneruskan SSE dari 9Router apa adanya dan membatalkan request upstream saat browser memutus koneksi.
 - Upload JPG/PNG/WebP untuk analisis gambar; file dikompresi sebelum dikirim dan disimpan lokal.
 - Mode **Buat Gambar** melalui `/v1/images/generations`, termasuk pilihan rasio, rendering hasil, dan generasi lanjutan yang mempertahankan prompt serta hasil gambar terakhir dalam sesi yang sama.
+- **File dari AI**: jika diminta membuat dokumen, AI membungkus isinya dalam blok `<boo-file name="...">`. Aplikasi menampilkannya sebagai kartu file dengan pratinjau (dokumen, tabel CSV, JSON, HTML ter-sandbox, dan tampilan PDF asli) serta unduhan PDF, DOCX, MD, TXT, CSV, JSON, atau HTML. PDF/DOCX dibuat di browser dari isi Markdown (`pdfmake`, `docx`) dan baru dimuat saat dibutuhkan.
 - Voice chat melalui Web Speech API (`id-ID`) dan balasan text-to-speech.
 - Tema light sebagai default, dark mode manual, dan preferensi tersimpan lokal.
 - Layout responsif untuk desktop dan mobile.
@@ -83,11 +85,14 @@ src/
 ├── domain/          # Entitas dan kontrak ChatGateway
 ├── application/     # Use case/state percakapan
 ├── infrastructure/  # Adapter HTTP 9Router dan browser voice
-├── presentation/    # Komponen UI reusable
-└── App.tsx          # Composition root dan layar chat
+├── presentation/    # Komponen UI: Sidebar, ChatHeader, ChatMessageItem, Composer,
+│                    #   dialog, pratinjau file/gambar, i18n, dan hook tampilan
+└── App.tsx          # Composition root: merangkai use case dengan komponen UI
 ```
 
 Dependency mengarah ke domain: UI menggunakan application hook, application bergantung pada kontrak domain, dan detail HTTP/voice berada di infrastructure.
+
+Semua teks antarmuka berada di `src/presentation/i18n.ts` (EN dan ID). Test `tests/i18n.test.ts` memastikan kedua bahasa punya key yang sama, jadi tambahkan setiap teks baru ke keduanya.
 
 ## Validasi
 
@@ -123,7 +128,9 @@ Catatan dari hasil pengujian yang perlu diingat saat memakai API ini:
 
 ## Riwayat lokal dan log
 
-Percakapan disimpan di `localStorage` browser dengan key `boo-ai-chat-history:v1` (maksimal 50 sesi). Tombol **Chat Baru** membuka sesi kosong tanpa menghapus riwayat; pilih judul pada sidebar untuk membuka sesi lama. Data tidak disinkronkan antarperangkat dan akan hilang jika storage browser dibersihkan.
+Percakapan disimpan di **IndexedDB** browser (database `boo-ai-chat`, store `sessions`) tanpa batas jumlah sesi. Riwayat versi lama di `localStorage` (`boo-ai-chat-history:v1`) dipindahkan otomatis saat aplikasi pertama kali dibuka, lalu key lamanya dihapus. Jika penyimpanan gagal (misalnya kuota browser penuh), pesan error ditampilkan; sesi tidak lagi dibuang diam-diam. Tombol **Chat Baru** membuka sesi kosong tanpa menghapus riwayat; pilih judul pada sidebar untuk membuka sesi lama. Data tidak disinkronkan antarperangkat dan akan hilang jika storage browser dibersihkan.
+
+Konteks yang dikirim ke AI mengikuti `context_length` model dari `/v1/models`: 75% dari panjang konteks dikurangi cadangan jawaban (maks. 16K token), dibatasi 200K token demi biaya dan latensi (32K jika model tidak melaporkannya). Hanya 4 gambar unggahan terbaru yang dikirim ulang; gambar yang lebih lama diganti catatan teks.
 
 Enam log terbaru dapat dilihat di bagian bawah sidebar. Log yang lebih lengkap tersedia di terminal tempat `pnpm dev` dijalankan dengan prefix `[9router-proxy]`, dan di browser console dengan prefix `[boo-client]`. Log hanya mencatat route, status, durasi, dan pesan error—tidak mencatat API key atau isi percakapan.
 

@@ -1,13 +1,28 @@
-import { isValidElement, useEffect, useRef, useState, type ReactNode } from 'react'
-import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
+import 'katex/dist/katex.min.css'
+import { isValidElement, memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import ReactMarkdown, { defaultUrlTransform, type Options } from 'react-markdown'
+import rehypeHighlight from 'rehype-highlight'
+import rehypeKatex from 'rehype-katex'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
+import { copyPlainText } from './clipboard'
 import { Icon } from './Icon'
+import { normalizeMathDelimiters } from './markdownMath'
+
+const REMARK_PLUGINS: Options['remarkPlugins'] = [remarkGfm, remarkMath]
+const REHYPE_PLUGINS: Options['rehypePlugins'] = [
+  // KaTeX lebih dulu agar blok ```math``` hasil remark-math tidak diperlakukan sebagai kode.
+  [rehypeKatex, { throwOnError: false, strict: false }],
+  // Tanpa deteksi otomatis: hanya blok berlabel bahasa yang diwarnai, jauh lebih ringan saat streaming.
+  [rehypeHighlight, { detect: false }],
+]
 
 interface MarkdownMessageProps {
   content: string
   copiedCodeLabel: string
   copyCodeLabel: string
   openLinkLabel: string
+  streaming?: boolean
 }
 
 function nodeToText(node: ReactNode): string {
@@ -15,23 +30,6 @@ function nodeToText(node: ReactNode): string {
   if (Array.isArray(node)) return node.map(nodeToText).join('')
   if (isValidElement<{ children?: ReactNode }>(node)) return nodeToText(node.props.children)
   return ''
-}
-
-async function copyPlainText(text: string): Promise<void> {
-  if (navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text)
-    return
-  }
-
-  const textArea = document.createElement('textarea')
-  textArea.value = text
-  textArea.style.position = 'fixed'
-  textArea.style.opacity = '0'
-  document.body.appendChild(textArea)
-  textArea.select()
-  const copied = document.execCommand('copy')
-  textArea.remove()
-  if (!copied) throw new Error('Clipboard unavailable.')
 }
 
 function CodeBlock({
@@ -92,9 +90,11 @@ function markdownUrlTransform(url: string, key: string, node: Readonly<{ tagName
   }
 }
 
-export function MarkdownMessage({ content, copiedCodeLabel, copyCodeLabel, openLinkLabel }: MarkdownMessageProps) {
+// memo: saat satu jawaban sedang di-stream, pesan-pesan lama tidak perlu diparsing ulang tiap frame.
+export const MarkdownMessage = memo(function MarkdownMessage({ content, copiedCodeLabel, copyCodeLabel, openLinkLabel, streaming = false }: MarkdownMessageProps) {
+  const markdown = useMemo(() => normalizeMathDelimiters(content), [content])
   return (
-    <div className="markdown-message">
+    <div aria-busy={streaming || undefined} className={`markdown-message${streaming ? ' is-streaming' : ''}`}>
       <ReactMarkdown
         components={{
           a: ({ children, href, title }) => {
@@ -105,11 +105,12 @@ export function MarkdownMessage({ content, copiedCodeLabel, copyCodeLabel, openL
           pre: ({ children }) => <CodeBlock copiedCodeLabel={copiedCodeLabel} copyCodeLabel={copyCodeLabel}>{children}</CodeBlock>,
           table: ({ children }) => <div className="markdown-table-wrap"><table>{children}</table></div>,
         }}
-        remarkPlugins={[remarkGfm]}
+        rehypePlugins={REHYPE_PLUGINS}
+        remarkPlugins={REMARK_PLUGINS}
         urlTransform={markdownUrlTransform}
       >
-        {content}
+        {markdown}
       </ReactMarkdown>
     </div>
   )
-}
+})

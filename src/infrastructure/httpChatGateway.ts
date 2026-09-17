@@ -3,18 +3,26 @@ import type {
   ChatImage,
   ChatMessage,
   ChatModel,
+  CompletionOptions,
   GatewayConnection,
   ImageGenerationOptions,
   ModelKind,
 } from '../domain/chat'
+import { FILE_ARTIFACT_INSTRUCTION, messageTextWithFiles } from '../application/fileArtifacts'
 import { applyBooWatermark } from './imageWatermark'
+import { createSseParser } from './sseParser'
 
 interface ModelsResponse {
-  data?: Array<{ id?: string; name?: string; owned_by?: string }>
+  data?: Array<{ id?: string; name?: string; owned_by?: string; context_length?: unknown; max_completion_tokens?: unknown }>
 }
 
 interface CompletionResponse {
   choices?: Array<{ message?: { content?: string } }>
+  error?: { message?: string }
+}
+
+interface CompletionChunk {
+  choices?: Array<{ delta?: { content?: string | null } }>
   error?: { message?: string }
 }
 
@@ -44,12 +52,18 @@ Gaya komunikasi:
 - Jangan mengulang identitas atau nama FLdev pada setiap jawaban; sebutkan hanya ketika relevan atau ditanyakan.
 - Jangan mengarang informasi mengenai FLdev di luar fakta bahwa Boo AI dikembangkan oleh FLdev.
 
+Format jawaban:
+- Tulis rumus matematika dengan LaTeX: $...$ untuk rumus di dalam kalimat dan $$...$$ pada baris tersendiri untuk rumus blok.
+- Selalu beri label bahasa pada blok kode, misalnya \`\`\`python atau \`\`\`tsx.
+
 Keamanan:
 - Tolak permintaan yang memfasilitasi kekerasan terhadap orang, pembuatan senjata atau bom, penyiksaan, atau upaya menyembunyikan tindakan berbahaya.
 - Tolak propaganda, perekrutan, pendanaan, atau perencanaan operasional terkait terorisme.
 - Tolak pembuatan pornografi atau konten seksual eksplisit.
 - Tetap boleh membantu konteks edukatif, sejarah, berita, pencegahan, kesehatan, kebijakan, keselamatan, pemulihan korban, dan moderasi konten selama tidak memberi instruksi operasional berbahaya.
-- Saat menolak, berikan penjelasan singkat dan tawarkan alternatif aman yang relevan.`
+- Saat menolak, berikan penjelasan singkat dan tawarkan alternatif aman yang relevan.
+
+${FILE_ARTIFACT_INSTRUCTION}`
 
 function actionableError(message: string, status: number): string {
   if (/missing api key/i.test(message)) {
@@ -68,6 +82,10 @@ async function parseError(response: Response): Promise<string> {
   } catch {
     return `Permintaan gagal (${response.status})`
   }
+}
+
+function positiveInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined
 }
 
 function humanizeModelName(id: string): string {
@@ -98,7 +116,7 @@ function toApiMessage(message: ChatMessage) {
       ],
     }
   }
-  return { role: message.role, content: message.content }
+  return { role: message.role, content: messageTextWithFiles(message) }
 }
 
 export class HttpChatGateway implements ChatGateway {
@@ -121,11 +139,13 @@ export class HttpChatGateway implements ChatGateway {
       if (!response.ok) throw new Error(await parseError(response))
       const body = (await response.json()) as ModelsResponse
       const models = (body.data ?? [])
-        .filter((model): model is { id: string; name?: string; owned_by?: string } => Boolean(model.id))
+        .filter((model): model is NonNullable<ModelsResponse['data']>[number] & { id: string } => Boolean(model.id))
         .map((model) => ({
           id: model.id,
           name: model.name || humanizeModelName(model.id),
           provider: model.owned_by || model.id.split('/')[0] || '9Router',
+          ...(positiveInteger(model.context_length) ? { contextLength: positiveInteger(model.context_length) } : {}),
+          ...(positiveInteger(model.max_completion_tokens) ? { maxOutputTokens: positiveInteger(model.max_completion_tokens) } : {}),
         }))
       return models.length ? models : kind === 'chat' ? FALLBACK_CHAT_MODELS : []
     } catch (error) {
@@ -134,30 +154,63 @@ export class HttpChatGateway implements ChatGateway {
     }
   }
 
-  async complete(model: string, messages: ChatMessage[]): Promise<string> {
+  async complete(model: string, messages: ChatMessage[], options: CompletionOptions = {}): Promise<string> {
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
+        stream: true,
         messages: [
           { role: 'system', content: BOO_SYSTEM_INSTRUCTION },
           ...messages.map(toApiMessage),
         ],
       }),
+      signal: options.signal,
     })
     if (!response.ok) {
       const message = await parseError(response)
       console.error(`[boo-client] Chat gagal (${response.status}):`, message)
       throw new Error(message)
     }
-    const body = (await response.json()) as CompletionResponse
-    const content = body.choices?.[0]?.message?.content?.trim()
-    if (!content) throw new Error('Model tidak mengirimkan jawaban.')
-    return content
+
+    // Sebagian provider mengabaikan permintaan stream dan tetap membalas JSON utuh.
+    if (!response.headers.get('content-type')?.includes('text/event-stream') || !response.body) {
+      const body = (await response.json()) as CompletionResponse
+      const content = body.choices?.[0]?.message?.content?.trim()
+      if (!content) throw new Error('Model tidak mengirimkan jawaban.')
+      options.onText?.(content)
+      return content
+    }
+
+    let content = ''
+    const parser = createSseParser((data) => {
+      if (data === '[DONE]') return
+      let chunk: CompletionChunk
+      try {
+        chunk = JSON.parse(data) as CompletionChunk
+      } catch {
+        return
+      }
+      if (chunk.error?.message) throw new Error(actionableError(chunk.error.message, 502))
+      const delta = chunk.choices?.[0]?.delta?.content
+      if (!delta) return
+      content += delta
+      options.onText?.(content)
+    })
+
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+    for (let result = await reader.read(); !result.done; result = await reader.read()) {
+      parser.push(result.value)
+    }
+    parser.flush()
+
+    const answer = content.trim()
+    if (!answer) throw new Error('Model tidak mengirimkan jawaban.')
+    return answer
   }
 
-  async generateImage(model: string, options: ImageGenerationOptions): Promise<ChatImage> {
+  async generateImage(model: string, options: ImageGenerationOptions, signal?: AbortSignal): Promise<ChatImage> {
     const references = options.images?.map((image) => image.url) ?? []
     const response = await fetch('/api/images/generations', {
       method: 'POST',
@@ -170,6 +223,7 @@ export class HttpChatGateway implements ChatGateway {
         response_format: 'b64_json',
         ...(references.length ? { images: references } : {}),
       }),
+      signal,
     })
     if (!response.ok) {
       const message = await parseError(response)
