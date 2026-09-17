@@ -31,7 +31,8 @@ async function readRequestBody(request: IncomingMessage): Promise<string> {
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
     size += buffer.length
-    if (size > 5_000_000) throw new Error('PAYLOAD_TOO_LARGE')
+    // Konteks besar + hingga 4 gambar unggahan (~900 KB base64 masing-masing).
+    if (size > 16_000_000) throw new Error('PAYLOAD_TOO_LARGE')
     chunks.push(buffer)
   }
 
@@ -75,6 +76,11 @@ function nineRouterProxy({ baseUrl, apiKey }: ProxyOptions): Plugin {
 
     const requestId = randomUUID().slice(0, 8)
     const startedAt = Date.now()
+    // Batalkan request ke 9Router jika browser memutus koneksi (tombol Stop atau tab ditutup).
+    const upstreamAbort = new AbortController()
+    response.on('close', () => {
+      if (!response.writableFinished) upstreamAbort.abort()
+    })
     response.setHeader('X-Request-Id', requestId)
     proxyLog('info', 'request.start', { requestId, route, method: request.method })
 
@@ -129,6 +135,7 @@ function nineRouterProxy({ baseUrl, apiKey }: ProxyOptions): Plugin {
       }
 
       let body: string | undefined
+      let wantsStream = false
       if (route === 'chat' || route === 'image-generation') {
         headers['Content-Type'] = 'application/json'
         const rawBody = await readRequestBody(request)
@@ -141,7 +148,8 @@ function nineRouterProxy({ baseUrl, apiKey }: ProxyOptions): Plugin {
           proxyLog('warn', 'request.invalid', { requestId, route })
           return writeJson(response, 400, { error: { message: 'Model atau payload tidak valid.' } })
         }
-        body = JSON.stringify(route === 'chat' ? { ...payload, stream: false } : payload)
+        wantsStream = route === 'chat' && (payload as { stream?: unknown }).stream === true
+        body = JSON.stringify(route === 'chat' ? { ...payload, stream: wantsStream } : payload)
       }
 
       const upstreamPath = route === 'models' ? 'v1/models'
@@ -154,9 +162,29 @@ function nineRouterProxy({ baseUrl, apiKey }: ProxyOptions): Plugin {
         method: request.method,
         headers,
         body,
+        signal: upstreamAbort.signal,
       })
-      const rawResponse = await upstream.text()
       const contentType = upstream.headers.get('content-type')
+
+      if (wantsStream && upstream.ok && upstream.body && contentType?.includes('text/event-stream')) {
+        response.statusCode = upstream.status
+        response.setHeader('Content-Type', contentType)
+        response.setHeader('Cache-Control', 'no-cache')
+        response.setHeader('X-Accel-Buffering', 'no')
+        response.flushHeaders()
+        for await (const chunk of upstream.body) response.write(chunk)
+        response.end()
+        proxyLog('info', 'request.success', {
+          requestId,
+          route,
+          status: upstream.status,
+          durationMs: Date.now() - startedAt,
+          streamed: true,
+        })
+        return
+      }
+
+      const rawResponse = await upstream.text()
       if (contentType) response.setHeader('Content-Type', contentType)
       response.statusCode = upstream.status
       response.end(rawResponse)
@@ -170,6 +198,10 @@ function nineRouterProxy({ baseUrl, apiKey }: ProxyOptions): Plugin {
       if (!upstream.ok) details.message = upstreamErrorMessage(rawResponse, upstream.status)
       proxyLog(upstream.ok ? 'info' : 'warn', upstream.ok ? 'request.success' : 'request.failed', details)
     } catch (error) {
+      if (upstreamAbort.signal.aborted) {
+        proxyLog('info', 'request.aborted', { requestId, route, durationMs: Date.now() - startedAt })
+        return
+      }
       const tooLarge = error instanceof Error && error.message === 'PAYLOAD_TOO_LARGE'
       const message = error instanceof Error ? error.message : 'Unknown proxy error'
       proxyLog('error', 'request.error', {
@@ -178,6 +210,10 @@ function nineRouterProxy({ baseUrl, apiKey }: ProxyOptions): Plugin {
         durationMs: Date.now() - startedAt,
         message,
       })
+      if (response.headersSent) {
+        response.end()
+        return
+      }
       writeJson(response, tooLarge ? 413 : 502, {
         error: { message: tooLarge ? 'Pesan terlalu besar.' : 'Tidak dapat terhubung ke layanan 9Router.' },
       })

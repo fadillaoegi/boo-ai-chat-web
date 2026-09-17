@@ -1,0 +1,86 @@
+/**
+ * DIGENERATE OTOMATIS oleh scripts/gen-tokens.ts — jangan diedit manual.
+ * Ubah src/design/tokens.ts lalu jalankan `pnpm tokens`.
+ */
+
+:root {
+  --boo-ink: #000000;
+  --boo-surface: #ffffff;
+  --boo-raised: #f5f5f5;
+  --boo-muted: #737373;
+  --boo-link: #0369a1;
+  --boo-shadow: #000000;
+  --boo-shadow-soft: #a3a3a3;
+}
+
+:root.dark {
+  --boo-ink: #ffffff;
+  --boo-surface: #171717;
+  --boo-raised: #262626;
+  --boo-muted: #a3a3a3;
+  --boo-link: #7dd3fc;
+  --boo-shadow: #525252;
+  --boo-shadow-soft: #525252;
+}
+
+:root {
+  --boo-accent: #7dd3fc;
+  --boo-accent-strong: #38bdf8;
+  --boo-accent-ink: #0c4a6e;
+  --boo-danger: #ef4444;
+  --boo-danger-strong: #dc2626;
+  --boo-shadow-inverse: #a3a3a3;
+  --boo-shadow-danger: #7f1d1d;
+  --boo-border: 2px;
+  --boo-border-thick: 3px;
+  --boo-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+@theme inline {
+  --color-boo-ink: var(--boo-ink);
+  --color-boo-surface: var(--boo-surface);
+  --color-boo-raised: var(--boo-raised);
+  --color-boo-muted: var(--boo-muted);
+  --color-boo-link: var(--boo-link);
+  --color-boo-shadow: var(--boo-shadow);
+  --color-boo-shadow-soft: var(--boo-shadow-soft);
+  --color-boo-accent: var(--boo-accent);
+  --color-boo-accent-strong: var(--boo-accent-strong);
+  --color-boo-accent-ink: var(--boo-accent-ink);
+  --color-boo-danger: var(--boo-danger);
+  --color-boo-danger-strong: var(--boo-danger-strong);
+  --color-boo-shadow-inverse: var(--boo-shadow-inverse);
+  --color-boo-shadow-danger: var(--boo-shadow-danger);
+
+  --shadow-boo-xs: 1px 1px 0 var(--boo-shadow);
+  --shadow-boo-sm: 2px 2px 0 var(--boo-shadow);
+  --shadow-boo-md: 3px 3px 0 var(--boo-shadow);
+  --shadow-boo-lg: 4px 4px 0 var(--boo-shadow);
+  --shadow-boo-xl: 5px 5px 0 var(--boo-shadow);
+  --shadow-boo-2xl: 8px 8px 0 var(--boo-shadow);
+  --shadow-boo-soft-xs: 1px 1px 0 var(--boo-shadow-soft);
+  --shadow-boo-soft-sm: 2px 2px 0 var(--boo-shadow-soft);
+  --shadow-boo-soft-md: 3px 3px 0 var(--boo-shadow-soft);
+  --shadow-boo-soft-lg: 4px 4px 0 var(--boo-shadow-soft);
+  --shadow-boo-soft-xl: 5px 5px 0 var(--boo-shadow-soft);
+  --shadow-boo-soft-2xl: 8px 8px 0 var(--boo-shadow-soft);
+  --shadow-boo-inverse-xs: 1px 1px 0 var(--boo-shadow-inverse);
+  --shadow-boo-inverse-sm: 2px 2px 0 var(--boo-shadow-inverse);
+  --shadow-boo-inverse-md: 3px 3px 0 var(--boo-shadow-inverse);
+  --shadow-boo-inverse-lg: 4px 4px 0 var(--boo-shadow-inverse);
+  --shadow-boo-inverse-xl: 5px 5px 0 var(--boo-shadow-inverse);
+  --shadow-boo-inverse-2xl: 8px 8px 0 var(--boo-shadow-inverse);
+  --shadow-boo-danger-xs: 1px 1px 0 var(--boo-shadow-danger);
+  --shadow-boo-danger-sm: 2px 2px 0 var(--boo-shadow-danger);
+  --shadow-boo-danger-md: 3px 3px 0 var(--boo-shadow-danger);
+  --shadow-boo-danger-lg: 4px 4px 0 var(--boo-shadow-danger);
+  --shadow-boo-danger-xl: 5px 5px 0 var(--boo-shadow-danger);
+  --shadow-boo-danger-2xl: 8px 8px 0 var(--boo-shadow-danger);
+
+  --radius-boo-md: 0.5rem;
+  --radius-boo-lg: 0.75rem;
+  --radius-boo-xl: 1rem;
+  --radius-boo-2xl: 1.25rem;
+
+  --font-boo: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}

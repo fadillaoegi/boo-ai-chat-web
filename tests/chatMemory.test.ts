@@ -75,3 +75,32 @@ test('unsuccessful image prompts are not treated as established visual context',
   assert.equal(result.prompt, 'Permintaan baru')
   assert.equal(result.continuedFromPrevious, false)
 })
+
+test('context budget follows the model and stays within the hard cap', async () => {
+  const { contextBudgetForModel, DEFAULT_INPUT_CONTEXT_TOKENS, MAX_INPUT_CONTEXT_TOKENS } = await import('../src/application/chatContext.ts')
+
+  assert.equal(contextBudgetForModel(undefined), DEFAULT_INPUT_CONTEXT_TOKENS)
+  assert.equal(contextBudgetForModel({ contextLength: 1_048_576, maxOutputTokens: 65_536 }), MAX_INPUT_CONTEXT_TOKENS)
+  assert.equal(contextBudgetForModel({ contextLength: 200_000, maxOutputTokens: 64_000 }), 134_000)
+  assert.equal(contextBudgetForModel({ contextLength: 128_000, maxOutputTokens: 64_000 }), 80_000)
+  assert.equal(contextBudgetForModel({ contextLength: 8_000 }), 4_000)
+})
+
+test('only the most recent uploaded images are resent', async () => {
+  const { limitContextImages } = await import('../src/application/chatContext.ts')
+  const upload = (name: string) => ({ kind: 'upload' as const, url: name, alt: name })
+  const generated = { kind: 'generated' as const, url: 'g', alt: 'g' }
+  const messages = [
+    message('1', 'user', 'lama', [upload('a'), upload('b'), upload('c')]),
+    message('2', 'assistant', 'hasil', [generated]),
+    message('3', 'user', 'baru', [upload('d'), upload('e')]),
+  ]
+
+  const limited = limitContextImages(messages, 3)
+
+  assert.deepEqual(limited[2].images?.map((image) => image.url), ['d', 'e'])
+  assert.deepEqual(limited[0].images?.map((image) => image.url), ['a'])
+  assert.match(limited[0].content, /2 earlier image attachments omitted/)
+  assert.equal(limited[1], messages[1])
+  assert.equal(messages[0].images?.length, 3)
+})

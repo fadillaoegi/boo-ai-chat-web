@@ -32,14 +32,51 @@ Plugin proxy berjalan pada `pnpm dev` dan `pnpm preview`. Untuk produksi di stat
 ## Fitur
 
 - Model selector dinamis untuk chat, vision, dan image generation.
-- Chat teks, status loading, error handling, dan percakapan baru.
+- Markdown kaya: syntax highlighting untuk blok kode berlabel bahasa (`rehype-highlight`) dan rumus matematika KaTeX (`$..$`, `$$..$$`, serta `\(..\)`/`\[..\]` yang otomatis diseragamkan; `$5` tetap dibaca sebagai harga).
+- Chat teks dengan jawaban streaming (muncul bertahap), tombol **Stop** untuk menghentikan respons (bagian yang sudah tampil tetap disimpan), percakapan baru, serta aksi pesan seperti ChatGPT/Claude: **Edit** pesan pengguna (pesan setelahnya dijawab ulang), **Buat ulang jawaban** terakhir, dan **Coba lagi** saat respons gagal. Mode request mengikuti jawaban yang diganti (gambar dibuat ulang sebagai gambar). Proxy `/api/chat` meneruskan SSE dari 9Router apa adanya dan membatalkan request upstream saat browser memutus koneksi.
 - Upload JPG/PNG/WebP untuk analisis gambar; file dikompresi sebelum dikirim dan disimpan lokal.
 - Mode **Buat Gambar** melalui `/v1/images/generations`, termasuk pilihan rasio, rendering hasil, dan generasi lanjutan yang mempertahankan prompt serta hasil gambar terakhir dalam sesi yang sama.
+- **File dari AI**: jika diminta membuat dokumen, AI membungkus isinya dalam blok `<boo-file name="...">`. Aplikasi menampilkannya sebagai kartu file dengan pratinjau (dokumen, tabel CSV, JSON, HTML ter-sandbox, dan tampilan PDF asli) serta unduhan PDF, DOCX, MD, TXT, CSV, JSON, atau HTML. PDF/DOCX dibuat di browser dari isi Markdown (`pdfmake`, `docx`) dan baru dimuat saat dibutuhkan.
 - Voice chat melalui Web Speech API (`id-ID`) dan balasan text-to-speech.
 - Tema light sebagai default, dark mode manual, dan preferensi tersimpan lokal.
 - Layout responsif untuk desktop dan mobile.
 
 Voice recognition bergantung pada dukungan Web Speech API browser. Chrome/Edge umumnya mendukung; browser yang tidak mendukung akan menonaktifkan tombol mikrofon.
+
+## Design token
+
+Token visual Boo (warna, kedalaman shadow, radius, border, font) berada di `src/design/tokens.ts`
+dan menjadi satu-satunya sumber kebenaran. File itu sengaja tidak mengimpor apa pun dan tidak
+menyebut CSS maupun DOM, sehingga bisa dipakai web maupun CLI `boo` nanti.
+
+```bash
+# ubah src/design/tokens.ts, lalu:
+pnpm tokens     # regenerate src/design/tokens.css
+```
+
+`tokens.css` **hasil generate — jangan diedit manual.** Isinya custom property pada `:root`/`:root.dark`
+plus blok `@theme inline` Tailwind.
+
+Shadow chunky punya empat varian warna:
+
+| Utility | Warna | Dipakai untuk |
+|---|---|---|
+| `shadow-boo-*` | ikut tema (`#000` → `#525252`) | permukaan normal |
+| `shadow-boo-soft-*` | ikut tema (`#a3a3a3` → `#525252`) | elemen markdown |
+| `shadow-boo-inverse-*` | tetap `#a3a3a3` | permukaan hitam |
+| `shadow-boo-danger-*` | tetap `#7f1d1d` | permukaan merah |
+
+Skala `*`: `xs`=1px, `sm`=2px, `md`=3px, `lg`=4px, `xl`=5px, `2xl`=8px.
+
+Karena warnanya sudah membalik lewat custom property, **jangan tulis varian `dark:` untuk shadow**
+— cukup `shadow-boo-md`, bukan `shadow-boo-md dark:shadow-boo-md`.
+
+CLI membaca token yang sama sebagai hex:
+
+```ts
+import { resolve } from './design/tokens.ts'
+resolve('dark').accent   // '#7dd3fc'
+```
 
 ## Clean architecture
 
@@ -48,22 +85,52 @@ src/
 ├── domain/          # Entitas dan kontrak ChatGateway
 ├── application/     # Use case/state percakapan
 ├── infrastructure/  # Adapter HTTP 9Router dan browser voice
-├── presentation/    # Komponen UI reusable
-└── App.tsx          # Composition root dan layar chat
+├── presentation/    # Komponen UI: Sidebar, ChatHeader, ChatMessageItem, Composer,
+│                    #   dialog, pratinjau file/gambar, i18n, dan hook tampilan
+└── App.tsx          # Composition root: merangkai use case dengan komponen UI
 ```
 
 Dependency mengarah ke domain: UI menggunakan application hook, application bergantung pada kontrak domain, dan detail HTTP/voice berada di infrastructure.
+
+Semua teks antarmuka berada di `src/presentation/i18n.ts` (EN dan ID). Test `tests/i18n.test.ts` memastikan kedua bahasa punya key yang sama, jadi tambahkan setiap teks baru ke keduanya.
 
 ## Validasi
 
 ```bash
 pnpm lint
 pnpm build
+pnpm test
 ```
+
+### Memeriksa dukungan function calling
+
+```bash
+pnpm check:tools                       # model kurasi
+pnpm check:tools ag/claude-sonnet-4-6  # model tertentu
+pnpm check:tools --all                 # seluruh model terdaftar
+```
+
+Skrip ini menguji tiga lapis: model mengeluarkan `tool_calls` yang valid, `arguments`
+tetap utuh setelah disambung dari chunk SSE, dan hasil tool yang dikirim balik
+(`role: "tool"`) benar-benar diterima sehingga percakapan bisa dilanjutkan.
+
+Jalankan ulang setiap kali menambah provider atau memperbarui 9Router — dukungan
+tool calling berbeda per provider dan bisa berubah tanpa pemberitahuan.
+
+Catatan dari hasil pengujian yang perlu diingat saat memakai API ini:
+
+- **Kirim `stream` secara eksplisit.** Provider `ag/*` default-nya streaming, sehingga
+  request tanpa field tersebut membalas SSE saat JSON yang diharapkan.
+- **Model thinking mengirim `reasoning_content`** terpisah dari `content`; jangan
+  dianggap balasan kosong.
+- **Format `tool_call_id` berbeda antarprovider.** Kembalikan apa adanya, jangan diparsing.
+- **Balasan kosong sesekali terjadi**, jadi pemanggilnya perlu retry.
 
 ## Riwayat lokal dan log
 
-Percakapan disimpan di `localStorage` browser dengan key `boo-ai-chat-history:v1` (maksimal 50 sesi). Tombol **Chat Baru** membuka sesi kosong tanpa menghapus riwayat; pilih judul pada sidebar untuk membuka sesi lama. Data tidak disinkronkan antarperangkat dan akan hilang jika storage browser dibersihkan.
+Percakapan disimpan di **IndexedDB** browser (database `boo-ai-chat`, store `sessions`) tanpa batas jumlah sesi. Riwayat versi lama di `localStorage` (`boo-ai-chat-history:v1`) dipindahkan otomatis saat aplikasi pertama kali dibuka, lalu key lamanya dihapus. Jika penyimpanan gagal (misalnya kuota browser penuh), pesan error ditampilkan; sesi tidak lagi dibuang diam-diam. Tombol **Chat Baru** membuka sesi kosong tanpa menghapus riwayat; pilih judul pada sidebar untuk membuka sesi lama. Data tidak disinkronkan antarperangkat dan akan hilang jika storage browser dibersihkan.
+
+Konteks yang dikirim ke AI mengikuti `context_length` model dari `/v1/models`: 75% dari panjang konteks dikurangi cadangan jawaban (maks. 16K token), dibatasi 200K token demi biaya dan latensi (32K jika model tidak melaporkannya). Hanya 4 gambar unggahan terbaru yang dikirim ulang; gambar yang lebih lama diganti catatan teks.
 
 Enam log terbaru dapat dilihat di bagian bawah sidebar. Log yang lebih lengkap tersedia di terminal tempat `pnpm dev` dijalankan dengan prefix `[9router-proxy]`, dan di browser console dengan prefix `[boo-client]`. Log hanya mencatat route, status, durasi, dan pesan error—tidak mencatat API key atau isi percakapan.
 

@@ -19,6 +19,25 @@
   30% { transform: translateY(-5px); opacity: 1; }
 }
 
+/* Kursor ketik di ujung jawaban yang sedang di-stream. */
+.markdown-message.is-streaming > :is(p, li, h1, h2, h3, h4):last-child::after,
+.markdown-message.is-streaming > :is(ul, ol):last-child > li:last-child::after,
+.markdown-message.is-streaming:empty::after {
+  display: inline-block;
+  width: .55em;
+  height: 1.05em;
+  margin-left: 3px;
+  border-radius: 2px;
+  background: currentColor;
+  content: "";
+  vertical-align: -.15em;
+  animation: streaming-caret 1s steps(1) infinite;
+}
+
+@keyframes streaming-caret {
+  50% { opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     scroll-behavior: auto !important;
@@ -87,7 +106,7 @@
 }
 
 .markdown-message a {
-  color: #0369a1;
+  color: var(--boo-link);
   font-weight: 800;
   text-decoration: underline;
   text-decoration-thickness: 2px;
@@ -181,7 +200,7 @@
   border: 2px solid #000;
   border-radius: 12px;
   background: #111827;
-  box-shadow: 3px 3px 0 #737373;
+  box-shadow: var(--shadow-boo-soft-md);
   color: #e5e7eb;
 }
 
@@ -236,6 +255,92 @@
   white-space: pre;
 }
 
+/* Pewarnaan highlight.js; latar blok kode selalu gelap di kedua tema. */
+.markdown-code-block .hljs-comment,
+.markdown-code-block .hljs-quote {
+  color: #8b949e;
+  font-style: italic;
+}
+
+.markdown-code-block .hljs-keyword,
+.markdown-code-block .hljs-selector-tag,
+.markdown-code-block .hljs-doctag,
+.markdown-code-block .hljs-meta .hljs-keyword {
+  color: #7dd3fc;
+}
+
+.markdown-code-block .hljs-string,
+.markdown-code-block .hljs-regexp,
+.markdown-code-block .hljs-meta .hljs-string {
+  color: #86efac;
+}
+
+.markdown-code-block .hljs-number,
+.markdown-code-block .hljs-literal,
+.markdown-code-block .hljs-symbol,
+.markdown-code-block .hljs-bullet {
+  color: #fdba74;
+}
+
+.markdown-code-block .hljs-title,
+.markdown-code-block .hljs-section,
+.markdown-code-block .hljs-selector-id {
+  color: #c4b5fd;
+}
+
+.markdown-code-block .hljs-type,
+.markdown-code-block .hljs-built_in,
+.markdown-code-block .hljs-title.class_,
+.markdown-code-block .hljs-selector-class {
+  color: #fcd34d;
+}
+
+.markdown-code-block .hljs-attr,
+.markdown-code-block .hljs-attribute,
+.markdown-code-block .hljs-variable,
+.markdown-code-block .hljs-template-variable,
+.markdown-code-block .hljs-property,
+.markdown-code-block .hljs-params {
+  color: #f9a8d4;
+}
+
+.markdown-code-block .hljs-meta,
+.markdown-code-block .hljs-name,
+.markdown-code-block .hljs-tag {
+  color: #93c5fd;
+}
+
+.markdown-code-block .hljs-addition {
+  background: rgb(34 197 94 / 15%);
+  color: #bbf7d0;
+}
+
+.markdown-code-block .hljs-deletion {
+  background: rgb(239 68 68 / 15%);
+  color: #fecaca;
+}
+
+.markdown-code-block .hljs-emphasis {
+  font-style: italic;
+}
+
+.markdown-code-block .hljs-strong {
+  font-weight: 800;
+}
+
+/* Rumus panjang digulir sendiri, bukan melebarkan halaman di ponsel. */
+.markdown-message .katex-display {
+  max-width: 100%;
+  margin: .9em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: .2em 0;
+}
+
+.markdown-message .katex {
+  font-size: 1.08em;
+}
+
 .markdown-code-block pre code {
   border: 0;
   background: transparent;
@@ -249,7 +354,7 @@
   overflow-x: auto;
   border: 2px solid #000;
   border-radius: 10px;
-  box-shadow: 3px 3px 0 #a3a3a3;
+  box-shadow: var(--shadow-boo-soft-md);
 }
 
 .markdown-message table {
@@ -294,7 +399,7 @@
   margin: .85em auto;
   border: 2px solid #000;
   border-radius: 12px;
-  box-shadow: 4px 4px 0 #a3a3a3;
+  box-shadow: var(--shadow-boo-soft-lg);
 }
 
 .markdown-message del {
@@ -303,10 +408,6 @@
 
 .dark .markdown-message h1 {
   border-bottom-color: rgb(255 255 255 / 16%);
-}
-
-.dark .markdown-message a {
-  color: #7dd3fc;
 }
 
 .dark .markdown-message a:hover {
@@ -327,12 +428,10 @@
 
 .dark .markdown-code-block {
   border-color: #fff;
-  box-shadow: 3px 3px 0 #525252;
 }
 
 .dark .markdown-table-wrap {
   border-color: #fff;
-  box-shadow: 3px 3px 0 #525252;
 }
 
 .dark .markdown-message th,
@@ -350,7 +449,6 @@
 
 .dark .markdown-message img {
   border-color: #fff;
-  box-shadow: 4px 4px 0 #525252;
 }
 
 @media (max-width: 640px) {

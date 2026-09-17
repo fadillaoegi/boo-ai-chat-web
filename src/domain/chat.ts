@@ -11,6 +11,15 @@ export interface ChatImage {
   watermarked?: boolean
 }
 
+export type ChatFileFormat = 'pdf' | 'docx' | 'md' | 'txt' | 'csv' | 'json' | 'html'
+
+export interface ChatFile {
+  id: string
+  name: string
+  format: ChatFileFormat
+  content: string
+}
+
 export interface ChatSessionReference {
   sessionId: string
   title: string
@@ -22,6 +31,7 @@ export interface ChatMessage {
   content: string
   image?: ChatImage
   images?: ChatImage[]
+  files?: ChatFile[]
   references?: ChatSessionReference[]
 }
 
@@ -29,6 +39,10 @@ export interface ChatModel {
   id: string
   name: string
   provider: string
+  /** Panjang konteks model dalam token, jika dilaporkan 9Router. */
+  contextLength?: number
+  /** Batas token jawaban model, jika dilaporkan 9Router. */
+  maxOutputTokens?: number
 }
 
 export interface ChatSession {
@@ -55,15 +69,21 @@ export interface GatewayConnection {
   apiKeyConfigured: boolean
 }
 
+export interface CompletionOptions {
+  signal?: AbortSignal
+  /** Dipanggil setiap potongan jawaban tiba, dengan seluruh teks yang terkumpul sejauh ini. */
+  onText?: (text: string) => void
+}
+
 export interface ChatGateway {
   listModels(kind: ModelKind): Promise<ChatModel[]>
   checkConnection(): Promise<GatewayConnection>
-  complete(model: string, messages: ChatMessage[]): Promise<string>
-  generateImage(model: string, options: ImageGenerationOptions): Promise<ChatImage>
+  complete(model: string, messages: ChatMessage[], options?: CompletionOptions): Promise<string>
+  generateImage(model: string, options: ImageGenerationOptions, signal?: AbortSignal): Promise<ChatImage>
 }
 
 export interface ChatHistoryRepository {
-  list(): ChatSession[]
-  save(session: ChatSession): void
-  delete(sessionId: string): void
+  list(): Promise<ChatSession[]>
+  save(session: ChatSession): Promise<void>
+  delete(sessionId: string): Promise<void>
 }
