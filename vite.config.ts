@@ -206,7 +206,7 @@ function nineRouterProxy({ baseUrl, apiKey }: ProxyOptions): Plugin {
       const message = error instanceof Error ? error.message : 'Unknown proxy error'
       proxyLog('error', 'request.error', {
         requestId,
-        route,
+        route,    
         durationMs: Date.now() - startedAt,
         message,
       })
